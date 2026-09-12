@@ -2,8 +2,8 @@
 
 #include "btai/render/RenderSnapshot.hpp"
 #include <array>
+#include <cstddef>
 #include <cstdint>
-#include <vector>
 #include <vulkan/vulkan.h>
 
 namespace btai {
@@ -23,15 +23,9 @@ public:
   void shutdown() noexcept;
 
 private:
-  struct Vertex {
-    float position[3];
-    float color[3];
-  };
-
-  struct alignas(16) PushConstants {
-    float viewProjection[16];
-    float model[16];
-  };
+  struct Vertex { float position[3]; float color[3]; };
+  struct alignas(16) PushConstants { float viewProjection[16]; };
+  struct alignas(16) InstanceData { float model[16]; float color[4]; };
 
   bool createInstance();
   bool createSurface();
@@ -43,20 +37,26 @@ private:
   bool createDepthResources();
   bool createGraphicsPipeline();
   bool createGeometryBuffers();
+  bool createInstanceBuffers();
+  bool createDescriptorResources();
   bool recreateSwapchain();
   void destroySwapchain() noexcept;
   void destroyFrameResources() noexcept;
   void destroyDepthResources() noexcept;
   void destroyGraphicsPipeline() noexcept;
   void destroyGeometryBuffers() noexcept;
+  void destroyInstanceBuffers() noexcept;
+  void destroyDescriptorResources() noexcept;
   bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
                     VkBuffer& buffer, VkDeviceMemory& memory);
   bool copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize size);
+  bool createImage(VkFormat format, VkImageUsageFlags usage, VkImage& image, VkDeviceMemory& memory);
   VkShaderModule createShaderModule(const std::vector<std::uint32_t>& code) const;
   bool recordCommandBuffer(VkCommandBuffer commandBuffer, std::uint32_t imageIndex,
                            const render::RenderSnapshot* snapshot);
 
   static constexpr std::size_t MaxFramesInFlight = 2;
+  static constexpr std::size_t MaxInstances = 10000;
 
   Window& window_;
   VkInstance instance_ = VK_NULL_HANDLE;
@@ -82,8 +82,15 @@ private:
   VkImageView depthView_ = VK_NULL_HANDLE;
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
 
+  VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+  std::array<VkDescriptorSet, MaxFramesInFlight> descriptorSets_{};
+  std::array<VkBuffer, MaxFramesInFlight> instanceBuffers_{};
+  std::array<VkDeviceMemory, MaxFramesInFlight> instanceMemories_{};
+  std::array<void*, MaxFramesInFlight> instanceMapped_{};
   VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline graphicsPipeline_ = VK_NULL_HANDLE;
+
   VkBuffer vertexBuffer_ = VK_NULL_HANDLE;
   VkDeviceMemory vertexMemory_ = VK_NULL_HANDLE;
   VkBuffer indexBuffer_ = VK_NULL_HANDLE;
