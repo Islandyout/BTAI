@@ -6,14 +6,16 @@
 #include <thread>
 
 namespace btai {
-Engine::Engine(EngineConfig config):config_(config){}
+Engine::Engine(EngineConfig config):config_(std::move(config)){}
 Engine::~Engine(){shutdown();}
 bool Engine::initialize(){
   if(running_)return true;
+  try { project_=std::make_unique<project::Project>(project::Project::open(config_.projectManifest)); }
+  catch(const std::exception& e){ Log::write(LogLevel::Error,e.what()); return false; }
   window_=std::make_unique<Window>(config_.width,config_.height,config_.title);
-  if(!window_->valid())return false;
+  if(!window_->valid()){window_.reset();project_.reset();return false;}
   renderer_=std::make_unique<VulkanRenderer>(*window_);
-  if(!renderer_->initialize()){renderer_.reset();window_.reset();return false;}
+  if(!renderer_->initialize()){renderer_.reset();window_.reset();project_.reset();return false;}
   running_=true;
   simulation_=std::jthread([this](std::stop_token t){simulationLoop(t);});
   return true;
@@ -54,5 +56,5 @@ int Engine::run(){
   shutdown();
   return 0;
 }
-void Engine::shutdown()noexcept{running_=false;if(simulation_.joinable()){simulation_.request_stop();simulation_.join();}if(renderer_)renderer_->shutdown();renderer_.reset();window_.reset();jobs_.stop();latestSnapshot_.store({},std::memory_order_release);}
+void Engine::shutdown()noexcept{running_=false;if(simulation_.joinable()){simulation_.request_stop();simulation_.join();}if(renderer_)renderer_->shutdown();renderer_.reset();window_.reset();project_.reset();jobs_.stop();latestSnapshot_.store({},std::memory_order_release);}
 }
