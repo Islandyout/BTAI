@@ -5,7 +5,6 @@
 #include <deque>
 #include <functional>
 #include <future>
-#include <jthread>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
