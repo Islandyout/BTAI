@@ -1,5 +1,6 @@
 #pragma once
 
+#include "btai/render/RenderSnapshot.hpp"
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -18,6 +19,7 @@ public:
 
   bool initialize();
   void draw();
+  void draw(const render::RenderSnapshot& snapshot);
   void shutdown() noexcept;
 
 private:
