@@ -23,6 +23,9 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_Declare(json GIT_REPOSITORY https://github.com/nlohmann/json.git GIT_TAG v3.11.3 GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(json)
 endif()
+include(FetchContent)
+FetchContent_Declare(tinygltf GIT_REPOSITORY https://github.com/syoyo/tinygltf.git GIT_TAG v2.9.5 GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(tinygltf)
 
 find_program(BTAI_GLSLC glslc HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 if(NOT BTAI_GLSLC)
@@ -50,9 +53,10 @@ add_executable(btai
   src/render/Camera.cpp
   src/ai/CommandInterpreter.cpp
   src/render/VulkanRendererStateOfArt.cpp
-  src/platform/Window.cpp)
+  src/platform/Window.cpp
+  src/assets/AssetManager.cpp)
 add_dependencies(btai btai_shaders)
-target_include_directories(btai PRIVATE include)
+target_include_directories(btai PRIVATE include ${tinygltf_SOURCE_DIR})
 target_link_libraries(btai PRIVATE Vulkan::Vulkan glfw nlohmann_json::nlohmann_json Threads::Threads)
 target_compile_definitions(btai PRIVATE GLFW_INCLUDE_VULKAN BTAI_SHADER_DIR="${BTAI_SHADER_OUTPUT_DIR}")
 if(BTAI_ENABLE_VALIDATION)
@@ -66,8 +70,8 @@ endif()
 
 if(BTAI_BUILD_TESTS)
   enable_testing()
-  add_executable(btai_tests tests/EngineCoreTests.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp src/ai/CommandInterpreter.cpp)
-  target_include_directories(btai_tests PRIVATE include)
+  add_executable(btai_tests tests/EngineCoreTests.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp src/ai/CommandInterpreter.cpp src/assets/AssetManager.cpp)
+  target_include_directories(btai_tests PRIVATE include ${tinygltf_SOURCE_DIR})
   target_link_libraries(btai_tests PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
   if(MSVC)
     target_compile_options(btai_tests PRIVATE /W4 /permissive-)
