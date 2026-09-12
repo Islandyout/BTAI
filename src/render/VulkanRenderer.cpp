@@ -235,6 +235,7 @@ bool VulkanRenderer::createSwapchain() {
   if (vkGetSwapchainImagesKHR(device_, swapchain_, &imageCountActual, nullptr) != VK_SUCCESS || imageCountActual == 0) return false;
   swapchainImages_.resize(imageCountActual);
   if (vkGetSwapchainImagesKHR(device_, swapchain_, &imageCountActual, swapchainImages_.data()) != VK_SUCCESS) return false;
+  imagesInFlight_.assign(swapchainImages_.size(), VK_NULL_HANDLE);
 
   swapchainImageViews_.resize(swapchainImages_.size(), VK_NULL_HANDLE);
   for (std::size_t i = 0; i < swapchainImages_.size(); ++i) {
@@ -322,7 +323,6 @@ bool VulkanRenderer::createFrameResources() {
         vkCreateSemaphore(device_, &semaphore, nullptr, &renderFinished_[i]) != VK_SUCCESS ||
         vkCreateFence(device_, &fence, nullptr, &inFlight_[i]) != VK_SUCCESS) return false;
   }
-  imagesInFlight_.assign(swapchainImages_.size(), VK_NULL_HANDLE);
   return true;
 }
 
@@ -418,6 +418,7 @@ void VulkanRenderer::destroySwapchain() noexcept {
   for (VkImageView view : swapchainImageViews_) if (view) vkDestroyImageView(device_, view, nullptr);
   swapchainImageViews_.clear();
   swapchainImages_.clear();
+  imagesInFlight_.clear();
   if (device_ && swapchain_) vkDestroySwapchainKHR(device_, swapchain_, nullptr);
   swapchain_ = VK_NULL_HANDLE;
 }
@@ -435,14 +436,13 @@ void VulkanRenderer::destroyFrameResources() noexcept {
   if (commandPool_) vkDestroyCommandPool(device_, commandPool_, nullptr);
   commandPool_ = VK_NULL_HANDLE;
   commandBuffers_.fill(VK_NULL_HANDLE);
-  imagesInFlight_.clear();
 }
 
 void VulkanRenderer::shutdown() noexcept {
   if (device_) vkDeviceWaitIdle(device_);
   destroyFrameResources();
   destroySwapchain();
-  if (device_) vkDestroyDevice(device_);
+  if (device_) vkDestroyDevice(device_, nullptr);
   device_ = VK_NULL_HANDLE;
   if (surface_ && instance_) vkDestroySurfaceKHR(instance_, surface_, nullptr);
   surface_ = VK_NULL_HANDLE;
