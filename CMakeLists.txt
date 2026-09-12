@@ -24,6 +24,10 @@ add_executable(btai
   src/core/Engine.cpp
   src/core/Log.cpp
   src/jobs/JobSystem.cpp
+  src/physics/Physics.cpp
+  src/world/Streaming.cpp
+  src/input/Input.cpp
+  src/render/Camera.cpp
   src/render/VulkanRenderer.cpp
   src/platform/Window.cpp
 )
@@ -43,7 +47,7 @@ endif()
 
 if(BTAI_BUILD_TESTS)
   enable_testing()
-  add_executable(btai_tests tests/EngineCoreTests.cpp)
+  add_executable(btai_tests tests/EngineCoreTests.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp)
   target_include_directories(btai_tests PRIVATE include)
   if(MSVC)
     target_compile_options(btai_tests PRIVATE /W4 /permissive-)
