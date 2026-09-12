@@ -19,7 +19,7 @@ public:
 
   bool initialize();
   void draw();
-  void draw(const render::RenderSnapshot& snapshot);
+  void draw(const render::RenderSnapshot&) { draw(); }
   void shutdown() noexcept;
 
 private:
