@@ -1,6 +1,7 @@
 #pragma once
 
 #include "btai/jobs/JobSystem.hpp"
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <future>
