@@ -1,9 +1,11 @@
 #include "btai/ai/CommandInterpreter.hpp"
 #include "btai/ecs/Registry.hpp"
 #include "btai/jobs/JobSystem.hpp"
+#include "btai/project/Project.hpp"
 #include "btai/render/RenderSnapshot.hpp"
-#include <cassert>
 #include <atomic>
+#include <cassert>
+#include <filesystem>
 
 int main() {
   btai::ecs::Registry registry;
@@ -40,5 +42,22 @@ int main() {
   assert(!ai.execute("{bad json").ok);
   assert(!ai.execute(nlohmann::json{{"command","set_ai_state"},{"entity",{{"index",spawned.entity.index},{"generation",spawned.entity.generation}}},{"state","Unknown"}}).ok);
   assert(ai.execute(nlohmann::json{{"command","destroy_entity"},{"entity",{{"index",spawned.entity.index},{"generation",spawned.entity.generation}}}}).ok);
+
+  const auto root=std::filesystem::temp_directory_path()/"btai_project_test";
+  std::error_code ec;
+  std::filesystem::remove_all(root,ec);
+  const auto project=btai::project::Project::create(root,"TestGame");
+  assert(project.config().name=="TestGame");
+  assert(std::filesystem::is_directory(project.assets()));
+  assert(std::filesystem::is_directory(project.scenes()));
+  const auto opened=btai::project::Project::open(root/"Project.btai");
+  assert(opened.root()==project.root());
+  assert(opened.config().startupScene=="Scenes/Main.btai");
+  assert(opened.list().size()==12);
+  assert(opened.resolve("Assets")==project.assets());
+  bool escaped=false;
+  try { (void)opened.resolve("../outside"); } catch(const std::invalid_argument&) { escaped=true; }
+  assert(escaped);
+  std::filesystem::remove_all(root,ec);
   return 0;
 }
