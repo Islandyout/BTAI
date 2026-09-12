@@ -22,6 +22,7 @@ add_executable(btai
   src/main.cpp
   src/core/Engine.cpp
   src/core/Log.cpp
+  src/jobs/JobSystem.cpp
   src/render/VulkanRenderer.cpp
   src/platform/Window.cpp
 )
