@@ -1,5 +1,6 @@
 #include "btai/ai/CommandInterpreter.hpp"
 #include "btai/ecs/Registry.hpp"
+#include "btai/editor/ProjectBrowser.hpp"
 #include "btai/jobs/JobSystem.hpp"
 #include "btai/project/Project.hpp"
 #include "btai/render/RenderSnapshot.hpp"
@@ -58,6 +59,13 @@ int main() {
   bool escaped=false;
   try { (void)opened.resolve("../outside"); } catch(const std::invalid_argument&) { escaped=true; }
   assert(escaped);
+
+  btai::editor::ProjectBrowser browser(opened);
+  const auto rootEntries=browser.entries();
+  assert(rootEntries.size()==12);
+  assert(rootEntries.front().kind==btai::editor::AssetKind::Folder);
+  const auto modelEntries=browser.entries("Assets/Models");
+  assert(modelEntries.size()==1&&modelEntries.front().path=="Assets/Models/sample.gltf");
   std::filesystem::remove_all(root,ec);
   return 0;
 }
