@@ -2,5 +2,12 @@
   "format": 1,
   "type": "scene",
   "name": "Main",
-  "entities": []
+  "world": "../Worlds/Main.btai",
+  "entities": [
+    {"id":"player","name":"Player","components":["Transform","Velocity","Camera"]},
+    {"id":"vehicles","name":"Vehicles","components":["Collection"]},
+    {"id":"pedestrians","name":"Pedestrians","components":["Collection"]},
+    {"id":"buildings","name":"Buildings","components":["Collection"]},
+    {"id":"environment","name":"Environment","components":["Collection"]}
+  ]
 }
