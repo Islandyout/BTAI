@@ -1,0 +1,17 @@
+{
+  "name": "GTA",
+  "manifest": "Projects/GTA/Project.btai",
+  "folders": [
+    "Assets", "Assets/Models", "Assets/Textures", "Assets/Materials", "Assets/Animations", "Assets/Audio", "Assets/Vehicles", "Assets/Characters", "Assets/Environment",
+    "Scenes", "Worlds", "Chunks", "Prefabs", "Shaders", "Scripts", "Cache", "Animations", "Audio", "Materials", "Settings"
+  ],
+  "scene": "Scenes/Main.btai",
+  "entities": [
+    {"id":"world","name":"GTA World","type":"Scene"},
+    {"id":"player","name":"Player","type":"Character","position":[0,5,45],"rotation":[0,0,0],"scale":[1,1,1]},
+    {"id":"vehicles","name":"Vehicles","type":"Collection"},
+    {"id":"pedestrians","name":"Pedestrians","type":"Collection"},
+    {"id":"buildings","name":"Buildings","type":"Collection"},
+    {"id":"environment","name":"Environment","type":"Collection"}
+  ]
+}
