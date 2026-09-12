@@ -939,7 +939,7 @@ void VulkanRenderer::draw(const render::RenderSnapshot& snapshot) {
   std::uint32_t imageIndex = 0;
   VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-    recreateSwapchain();
+    if (!recreateSwapchain()) shutdown();
     return;
   }
   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return;
@@ -947,10 +947,10 @@ void VulkanRenderer::draw(const render::RenderSnapshot& snapshot) {
   if (imagesInFlight_[imageIndex]) {
     if (vkWaitForFences(device_, 1, &imagesInFlight_[imageIndex], VK_TRUE, UINT64_MAX) != VK_SUCCESS) return;
   }
-  imagesInFlight_[imageIndex] = inFlight_[currentFrame_];
-  if (vkResetFences(device_, 1, &inFlight_[currentFrame_]) != VK_SUCCESS) return;
   if (vkResetCommandBuffer(commandBuffers_[currentFrame_], 0) != VK_SUCCESS) return;
   if (!recordCommandBuffer(commandBuffers_[currentFrame_], imageIndex, &snapshot)) return;
+  if (vkResetFences(device_, 1, &inFlight_[currentFrame_]) != VK_SUCCESS) return;
+  imagesInFlight_[imageIndex] = inFlight_[currentFrame_];
 
   const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
@@ -961,7 +961,10 @@ void VulkanRenderer::draw(const render::RenderSnapshot& snapshot) {
   submit.pCommandBuffers = &commandBuffers_[currentFrame_];
   submit.signalSemaphoreCount = 1;
   submit.pSignalSemaphores = &renderFinished_[currentFrame_];
-  if (vkQueueSubmit(graphicsQueue_, 1, &submit, inFlight_[currentFrame_]) != VK_SUCCESS) return;
+  if (vkQueueSubmit(graphicsQueue_, 1, &submit, inFlight_[currentFrame_]) != VK_SUCCESS) {
+    vkQueueWaitIdle(graphicsQueue_);
+    return;
+  }
 
   VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
   present.waitSemaphoreCount = 1;
@@ -970,8 +973,11 @@ void VulkanRenderer::draw(const render::RenderSnapshot& snapshot) {
   present.pSwapchains = &swapchain_;
   present.pImageIndices = &imageIndex;
   result = vkQueuePresentKHR(presentQueue_, &present);
-  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) recreateSwapchain();
-  else if (result != VK_SUCCESS) Log::write(LogLevel::Error, "Vulkan queue present failed");
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (!recreateSwapchain()) shutdown();
+  } else if (result != VK_SUCCESS) {
+    Log::write(LogLevel::Error, "Vulkan queue present failed");
+  }
   currentFrame_ = (currentFrame_ + 1) % MaxFramesInFlight;
 }
 
@@ -979,8 +985,8 @@ void VulkanRenderer::shutdown() noexcept {
   if (device_) vkDeviceWaitIdle(device_);
   destroyGeometryBuffers();
   destroyGraphicsPipeline();
-  destroySwapchain();
   destroyDepthResources();
+  destroySwapchain();
   if (renderPass_ && device_) vkDestroyRenderPass(device_, renderPass_, nullptr);
   renderPass_ = VK_NULL_HANDLE;
   destroyFrameResources();
