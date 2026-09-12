@@ -1,5 +1,6 @@
 #pragma once
 #include "btai/ai/CommandInterpreter.hpp"
+#include "btai/assets/AssetManager.hpp"
 #include "btai/core/Log.hpp"
 #include "btai/ecs/Registry.hpp"
 #include "btai/jobs/JobSystem.hpp"
@@ -9,6 +10,7 @@
 #include "btai/world/Streaming.hpp"
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <thread>
 
@@ -27,6 +29,7 @@ private:
   void simulationLoop(std::stop_token token);
   EngineConfig config_{};
   JobSystem jobs_{};
+  assets::AssetManager assets_{jobs_};
   ecs::Registry registry_{};
   ai::CommandInterpreter ai_{registry_};
   physics::PhysicsWorld physics_{};
