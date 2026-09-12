@@ -25,7 +25,7 @@ private:
   ecs::Registry registry_{};
   ai::CommandInterpreter ai_{registry_};
   physics::PhysicsWorld physics_{};
-  world::Streamer streamer_{};
+  world::Streamer streamer_{jobs_};
   std::unique_ptr<Window> window_;
   std::unique_ptr<VulkanRenderer> renderer_;
   std::jthread simulation_;
