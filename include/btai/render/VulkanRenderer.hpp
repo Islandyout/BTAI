@@ -19,10 +19,20 @@ public:
 
   bool initialize();
   void draw();
-  void draw(const render::RenderSnapshot&) { draw(); }
+  void draw(const render::RenderSnapshot& snapshot);
   void shutdown() noexcept;
 
 private:
+  struct Vertex {
+    float position[3];
+    float color[3];
+  };
+
+  struct alignas(16) PushConstants {
+    float viewProjection[16];
+    float model[16];
+  };
+
   bool createInstance();
   bool createSurface();
   bool selectDevice();
@@ -30,9 +40,21 @@ private:
   bool createSwapchain();
   bool createRenderPass();
   bool createFrameResources();
+  bool createDepthResources();
+  bool createGraphicsPipeline();
+  bool createGeometryBuffers();
   bool recreateSwapchain();
   void destroySwapchain() noexcept;
   void destroyFrameResources() noexcept;
+  void destroyDepthResources() noexcept;
+  void destroyGraphicsPipeline() noexcept;
+  void destroyGeometryBuffers() noexcept;
+  bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                    VkBuffer& buffer, VkDeviceMemory& memory);
+  bool copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize size);
+  VkShaderModule createShaderModule(const std::vector<std::uint32_t>& code) const;
+  bool recordCommandBuffer(VkCommandBuffer commandBuffer, std::uint32_t imageIndex,
+                           const render::RenderSnapshot* snapshot);
 
   static constexpr std::size_t MaxFramesInFlight = 2;
 
@@ -45,13 +67,29 @@ private:
   VkQueue presentQueue_ = VK_NULL_HANDLE;
   std::uint32_t graphicsFamily_ = 0;
   std::uint32_t presentFamily_ = 0;
+  VkPhysicalDeviceMemoryProperties memoryProperties_{};
+
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   std::vector<VkImage> swapchainImages_;
   std::vector<VkImageView> swapchainImageViews_;
   std::vector<VkFramebuffer> framebuffers_;
   VkFormat swapchainFormat_ = VK_FORMAT_UNDEFINED;
   VkExtent2D extent_{};
+
   VkRenderPass renderPass_ = VK_NULL_HANDLE;
+  VkImage depthImage_ = VK_NULL_HANDLE;
+  VkDeviceMemory depthMemory_ = VK_NULL_HANDLE;
+  VkImageView depthView_ = VK_NULL_HANDLE;
+  VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
+
+  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline graphicsPipeline_ = VK_NULL_HANDLE;
+  VkBuffer vertexBuffer_ = VK_NULL_HANDLE;
+  VkDeviceMemory vertexMemory_ = VK_NULL_HANDLE;
+  VkBuffer indexBuffer_ = VK_NULL_HANDLE;
+  VkDeviceMemory indexMemory_ = VK_NULL_HANDLE;
+  std::uint32_t indexCount_ = 0;
+
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   std::array<VkCommandBuffer, MaxFramesInFlight> commandBuffers_{};
   std::array<VkSemaphore, MaxFramesInFlight> imageAvailable_{};
