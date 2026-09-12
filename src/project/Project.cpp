@@ -8,7 +8,7 @@
 namespace btai::project {
 namespace {
 constexpr const char* kManifest="Project.btai";
-constexpr std::array<const char*,11> kFolders{"Assets","Scenes","Worlds","Chunks","Prefabs","Materials","Shaders","Scripts","Audio","Animations","Cache"};
+constexpr std::array<const char*,12> kFolders{"Assets","Scenes","Worlds","Chunks","Prefabs","Materials","Shaders","Scripts","Audio","Animations","Cache","Settings"};
 std::filesystem::path canonicalRoot(const std::filesystem::path& root) {
   std::error_code ec;
   auto result=std::filesystem::weakly_canonical(root,ec);
