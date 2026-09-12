@@ -46,7 +46,6 @@ void PhysicsWorld::integrate(Body& b, float dt) const noexcept {
 
 void PhysicsWorld::collide(Body& a, Body& b) {
   if (!a.body->dynamic && !b.body->dynamic) return;
-
   ecs::Vec3 normal{};
   float penetration = 0.0f;
   const auto aPos = a.transform->position;
@@ -87,9 +86,9 @@ void PhysicsWorld::collide(Body& a, Body& b) {
       const float dx = boxHalf.x-std::abs(local.x);
       const float dy = boxHalf.y-std::abs(local.y);
       const float dz = boxHalf.z-std::abs(local.z);
-      if (dx <= dy && dx <= dz) normal = sphere == &a ? ecs::Vec3{local.x>=0.0f?-1.0f:1.0f,0,0} : ecs::Vec3{local.x>=0.0f?1.0f:-1.0f,0,0}, penetration=radius+dx;
-      else if (dy <= dz) normal = sphere == &a ? ecs::Vec3{0,local.y>=0.0f?-1.0f:1.0f,0} : ecs::Vec3{0,local.y>=0.0f?1.0f:-1.0f,0}, penetration=radius+dy;
-      else normal = sphere == &a ? ecs::Vec3{0,0,local.z>=0.0f?-1.0f:1.0f} : ecs::Vec3{0,0,local.z>=0.0f?1.0f:-1.0f}, penetration=radius+dz;
+      if (dx <= dy && dx <= dz) { normal=sphere==&a?ecs::Vec3{local.x>=0.0f?-1.0f:1.0f,0,0}:ecs::Vec3{local.x>=0.0f?1.0f:-1.0f,0,0}; penetration=radius+dx; }
+      else if (dy <= dz) { normal=sphere==&a?ecs::Vec3{0,local.y>=0.0f?-1.0f:1.0f,0}:ecs::Vec3{0,local.y>=0.0f?1.0f:-1.0f,0}; penetration=radius+dy; }
+      else { normal=sphere==&a?ecs::Vec3{0,0,local.z>=0.0f?-1.0f:1.0f}:ecs::Vec3{0,0,local.z>=0.0f?1.0f:-1.0f}; penetration=radius+dz; }
     }
   }
 
@@ -103,14 +102,15 @@ void PhysicsWorld::collide(Body& a, Body& b) {
   if (a.body->dynamic) a.transform->position = sub(a.transform->position,mul(correction,invA));
   if (b.body->dynamic) b.transform->position = add(b.transform->position,mul(correction,invB));
 
-  const float relative = dot(sub(b.velocity->value,a.velocity->value),normal);
+  const ecs::Vec3 relativeVelocity = sub(b.velocity->value,a.velocity->value);
+  const float relative = dot(relativeVelocity,normal);
   if (relative >= 0.0f) return;
   const float impulseMagnitude = -(1.0f+config_.restitution)*relative/invSum;
   const ecs::Vec3 impulse = mul(normal,impulseMagnitude);
   if (a.body->dynamic) a.velocity->value = sub(a.velocity->value,mul(impulse,invA));
   if (b.body->dynamic) b.velocity->value = add(b.velocity->value,mul(impulse,invB));
 
-  const ecs::Vec3 tangentVelocity = sub(sub(b.velocity->value,a.velocity->value),mul(normal,dot(sub(b.velocity->value,a.velocity->value),normal)));
+  const ecs::Vec3 tangentVelocity = sub(relativeVelocity,mul(normal,relative));
   const float tangentSq = lengthSq(tangentVelocity);
   if (tangentSq > 1e-10f && config_.friction > 0.0f) {
     const ecs::Vec3 tangent = mul(tangentVelocity,1.0f/std::sqrt(tangentSq));
@@ -138,12 +138,14 @@ void PhysicsWorld::step(ecs::Registry& registry, float dt) {
   for (std::size_t i=0; i<bodies_.size(); ++i) {
     const Body& b = bodies_[i];
     const ecs::Vec3 p = b.transform->position;
-    ecs::Vec3 half = b.collider->type == ecs::Collider::Type::AABB ? b.collider->halfExtents : ecs::Vec3{b.collider->radius,b.collider->radius,b.collider->radius};
+    const ecs::Vec3 half = b.collider->type == ecs::Collider::Type::AABB ? b.collider->halfExtents : ecs::Vec3{b.collider->radius,b.collider->radius,b.collider->radius};
     const Cell lo = cell(sub(p,half));
     const Cell hi = cell(add(p,half));
     for (int z=lo.z; z<=hi.z; ++z) for (int y=lo.y; y<=hi.y; ++y) for (int x=lo.x; x<=hi.x; ++x) grid_[{x,y,z}].push_back(i);
   }
 
+  std::vector<std::uint64_t> pairs;
+  pairs.reserve(bodies_.size()*2U);
   for (std::size_t i=0; i<bodies_.size(); ++i) {
     const Cell c = cell(bodies_[i].transform->position);
     for (int z=-1; z<=1; ++z) for (int y=-1; y<=1; ++y) for (int x=-1; x<=1; ++x) {
@@ -151,10 +153,17 @@ void PhysicsWorld::step(ecs::Registry& registry, float dt) {
       if (it == grid_.end()) continue;
       for (std::size_t j : it->second) {
         if (j <= i) continue;
-        ++lastPairCount_;
-        collide(bodies_[i],bodies_[j]);
+        pairs.push_back((static_cast<std::uint64_t>(i)<<32U)|static_cast<std::uint64_t>(j));
       }
     }
+  }
+  std::sort(pairs.begin(),pairs.end());
+  pairs.erase(std::unique(pairs.begin(),pairs.end()),pairs.end());
+  lastPairCount_ = pairs.size();
+  for (const std::uint64_t pair : pairs) {
+    const std::size_t a = static_cast<std::size_t>(pair>>32U);
+    const std::size_t b = static_cast<std::size_t>(pair&0xffffffffULL);
+    collide(bodies_[a],bodies_[b]);
   }
 }
 
