@@ -42,8 +42,7 @@ add_custom_command(OUTPUT ${BTAI_SHADER_BINARIES}
   DEPENDS ${BTAI_SHADER_SOURCES} VERBATIM)
 add_custom_target(btai_shaders ALL DEPENDS ${BTAI_SHADER_BINARIES})
 
-add_executable(btai
-  src/main.cpp
+set(BTAI_RUNTIME_SOURCES
   src/core/Engine.cpp
   src/core/Log.cpp
   src/jobs/JobSystem.cpp
@@ -55,7 +54,10 @@ add_executable(btai
   src/render/VulkanRendererStateOfArt.cpp
   src/render/VulkanRendererGltf.cpp
   src/platform/Window.cpp
-  src/assets/AssetManager.cpp)
+  src/assets/AssetManager.cpp
+  src/project/Project.cpp)
+
+add_executable(btai src/main.cpp ${BTAI_RUNTIME_SOURCES})
 add_dependencies(btai btai_shaders)
 target_include_directories(btai PRIVATE include ${tinygltf_SOURCE_DIR})
 target_link_libraries(btai PRIVATE Vulkan::Vulkan glfw nlohmann_json::nlohmann_json Threads::Threads)
@@ -71,7 +73,7 @@ endif()
 
 if(BTAI_BUILD_TESTS)
   enable_testing()
-  add_executable(btai_tests tests/EngineCoreTests.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp src/ai/CommandInterpreter.cpp src/assets/AssetManager.cpp)
+  add_executable(btai_tests tests/EngineCoreTests.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp src/ai/CommandInterpreter.cpp src/assets/AssetManager.cpp src/project/Project.cpp)
   target_include_directories(btai_tests PRIVATE include ${tinygltf_SOURCE_DIR})
   target_link_libraries(btai_tests PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
   if(MSVC)
