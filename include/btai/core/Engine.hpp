@@ -5,6 +5,7 @@
 #include "btai/ecs/Registry.hpp"
 #include "btai/jobs/JobSystem.hpp"
 #include "btai/physics/Physics.hpp"
+#include "btai/render/RenderSnapshot.hpp"
 #include "btai/world/Streaming.hpp"
 #include <atomic>
 #include <cstdint>
@@ -28,6 +29,7 @@ private:
   world::Streamer streamer_{jobs_};
   std::unique_ptr<Window> window_;
   std::unique_ptr<VulkanRenderer> renderer_;
+  std::shared_ptr<const render::RenderSnapshot> latestSnapshot_;
   std::jthread simulation_;
   std::atomic_bool running_{false};
 };
