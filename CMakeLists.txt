@@ -56,6 +56,7 @@ set(BTAI_RUNTIME_SOURCES
   src/platform/Window.cpp
   src/assets/AssetManager.cpp
   src/project/Project.cpp
+  src/project/Scene.cpp
   src/editor/ProjectBrowser.cpp)
 
 add_executable(btai src/main.cpp ${BTAI_RUNTIME_SOURCES})
@@ -74,7 +75,7 @@ endif()
 
 if(BTAI_BUILD_TESTS)
   enable_testing()
-  add_executable(btai_tests tests/EngineCoreTests.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp src/ai/CommandInterpreter.cpp src/assets/AssetManager.cpp src/project/Project.cpp src/editor/ProjectBrowser.cpp)
+  add_executable(btai_tests tests/EngineCoreTests.cpp src/core/Log.cpp src/jobs/JobSystem.cpp src/physics/Physics.cpp src/world/Streaming.cpp src/ai/CommandInterpreter.cpp src/assets/AssetManager.cpp src/project/Project.cpp src/project/Scene.cpp src/editor/ProjectBrowser.cpp)
   target_include_directories(btai_tests PRIVATE include ${tinygltf_SOURCE_DIR})
   target_link_libraries(btai_tests PRIVATE nlohmann_json::nlohmann_json Threads::Threads)
   if(MSVC)
