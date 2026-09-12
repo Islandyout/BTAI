@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 #include <vulkan/vulkan.h>
 
 namespace btai {
@@ -11,6 +12,8 @@ class Window;
 
 class VulkanRenderer final {
 public:
+  struct Vertex { float position[3]; float color[3]; };
+
   explicit VulkanRenderer(Window& window);
   ~VulkanRenderer();
 
@@ -23,7 +26,6 @@ public:
   void shutdown() noexcept;
 
 private:
-  struct Vertex { float position[3]; float color[3]; };
   struct alignas(16) PushConstants { float viewProjection[16]; };
   struct alignas(16) InstanceData { float model[16]; float color[4]; };
 
