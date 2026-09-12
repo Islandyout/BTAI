@@ -39,7 +39,7 @@ void Engine::simulationLoop(std::stop_token token){
     auto snapshot=std::make_shared<render::RenderSnapshot>();
     snapshot->tick=++tick;
     render::extract(registry_,*snapshot);
-    std::atomic_store_explicit(&latestSnapshot_,std::shared_ptr<const render::RenderSnapshot>(std::move(snapshot)),std::memory_order_release);
+    latestSnapshot_.store(std::shared_ptr<const render::RenderSnapshot>(std::move(snapshot)),std::memory_order_release);
     std::this_thread::sleep_until(next);
     if(clock::now()>next+step*4)next=clock::now();
   }
@@ -48,11 +48,11 @@ int Engine::run(){
   if(!running_&&!initialize())return 1;
   while(running_&&!window_->shouldClose()){
     window_->poll();
-    const auto snapshot=std::atomic_load_explicit(&latestSnapshot_,std::memory_order_acquire);
+    const auto snapshot=latestSnapshot_.load(std::memory_order_acquire);
     if(snapshot)renderer_->draw(*snapshot);else renderer_->draw();
   }
   shutdown();
   return 0;
 }
-void Engine::shutdown()noexcept{running_=false;if(simulation_.joinable()){simulation_.request_stop();simulation_.join();}if(renderer_)renderer_->shutdown();renderer_.reset();window_.reset();jobs_.stop();std::atomic_store_explicit(&latestSnapshot_,std::shared_ptr<const render::RenderSnapshot>{},std::memory_order_release);}
+void Engine::shutdown()noexcept{running_=false;if(simulation_.joinable()){simulation_.request_stop();simulation_.join();}if(renderer_)renderer_->shutdown();renderer_.reset();window_.reset();jobs_.stop();latestSnapshot_.store({},std::memory_order_release);}
 }
