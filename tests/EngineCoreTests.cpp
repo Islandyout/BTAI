@@ -1,6 +1,7 @@
 #include "btai/ai/CommandInterpreter.hpp"
 #include "btai/ecs/Registry.hpp"
 #include "btai/jobs/JobSystem.hpp"
+#include "btai/render/RenderSnapshot.hpp"
 #include <cassert>
 #include <atomic>
 
@@ -23,6 +24,15 @@ int main() {
   btai::ai::CommandInterpreter ai(registry);
   const auto spawned=ai.execute(R"({"command":"spawn_entity","transform":[1,2,3],"velocity":[0,0,1],"physics":true,"name":"ped"})");
   assert(spawned.ok&&registry.has<btai::ecs::RigidBody>(spawned.entity));
+  registry.add<btai::ecs::Rotation>(spawned.entity);
+  registry.add<btai::ecs::Scale>(spawned.entity);
+  registry.add<btai::ecs::Renderable>(spawned.entity);
+  btai::render::RenderSnapshot snapshot;
+  btai::render::extract(registry,snapshot);
+  assert(snapshot.instances.size()==1);
+  assert(snapshot.instances[0].entity==spawned.entity);
+  assert(snapshot.instances[0].position.x==1.0f);
+
   const auto moved=ai.execute(nlohmann::json{{"command","set_transform"},{"entity",{{"index",spawned.entity.index},{"generation",spawned.entity.generation}}},{"position",{4,5,6}}});
   assert(moved.ok&&registry.get<btai::ecs::Transform>(spawned.entity)->position.x==4.0f);
   const auto state=ai.execute(nlohmann::json{{"command","set_ai_state"},{"entity",{{"index",spawned.entity.index},{"generation",spawned.entity.generation}}},{"state","Running"}});
