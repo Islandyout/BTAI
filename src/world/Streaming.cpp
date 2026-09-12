@@ -1,0 +1,91 @@
+#include "btai/world/Streaming.hpp"
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+namespace btai::world {
+
+std::size_t ChunkCoordHash::operator()(ChunkCoord c) const noexcept {
+  std::uint64_t x=static_cast<std::uint32_t>(c.x), z=static_cast<std::uint32_t>(c.z);
+  x ^= x>>30; x*=0xbf58476d1ce4e5b9ULL; x^=x>>27; x*=0x94d049bb133111ebULL; x^=x>>31;
+  z ^= z>>30; z*=0xbf58476d1ce4e5b9ULL; z^=z>>27; z*=0x94d049bb133111ebULL; z^=z>>31;
+  return static_cast<std::size_t>(x^(z+0x9e3779b97f4a7c15ULL+(x<<6U)+(x>>2U)));
+}
+
+Streamer::Streamer(JobSystem& jobs, Config config) : jobs_(jobs), config_(config) {
+  if (!(config_.chunkSize>0.0f)) config_.chunkSize=128.0f;
+  config_.radius=std::max<std::int32_t>(0,config_.radius);
+  config_.maxActive=std::max<std::size_t>(1,config_.maxActive);
+}
+Streamer::~Streamer() { for (auto& [_,e]:chunks_) if(e.load.valid()) e.load.wait(); }
+
+std::int64_t Streamer::distanceSq(ChunkCoord a,ChunkCoord b) noexcept {
+  const std::int64_t x=static_cast<std::int64_t>(a.x)-b.x,z=static_cast<std::int64_t>(a.z)-b.z; return x*x+z*z;
+}
+
+ChunkData Streamer::generate(ChunkCoord coord) {
+  ChunkData data; data.coord=coord;
+  const std::uint64_t seed=static_cast<std::uint32_t>(coord.x)*0x9e3779b97f4a7c15ULL ^ static_cast<std::uint32_t>(coord.z)*0xbf58476d1ce4e5b9ULL;
+  const float noise=static_cast<float>((seed^(seed>>29))&1023U)/1023.0f;
+  data.terrainHeight=(noise-0.5f)*8.0f;
+  data.objects.reserve(16); data.spawns.reserve(8);
+  for(std::uint32_t i=0;i<16;++i) {
+    const std::uint64_t v=seed+0x9e3779b97f4a7c15ULL*i;
+    const float fx=static_cast<float>((v>>8)&255U)-127.5f, fz=static_cast<float>((v>>24)&255U)-127.5f;
+    data.objects.push_back({1,{fx,data.terrainHeight,fz},{1,1,1}});
+  }
+  for(std::uint32_t i=0;i<8;++i) {
+    const std::uint64_t v=seed+0xd1b54a32d192ed03ULL*i;
+    data.spawns.push_back({1,{static_cast<float>((v>>10)&255U)-127.5f,data.terrainHeight+1.0f,static_cast<float>((v>>26)&255U)-127.5f}});
+  }
+  return data;
+}
+
+void Streamer::request(ChunkCoord coord) {
+  Entry& e=chunks_[coord];
+  if(e.state!=ChunkState::Unloaded) return;
+  e.state=ChunkState::Requested; e.request=++generation_;
+  const std::uint64_t requestId=e.request;
+  e.state=ChunkState::Loading;
+  e.load=jobs_.submit([coord,requestId]() { (void)requestId; return generate(coord); });
+}
+
+void Streamer::unload(ChunkCoord coord) {
+  auto it=chunks_.find(coord); if(it==chunks_.end()) return;
+  Entry& e=it->second;
+  if(e.state==ChunkState::Active) e.state=ChunkState::Deactivating;
+  if(e.state==ChunkState::Deactivating) e.state=ChunkState::Unloading;
+  if(e.state==ChunkState::Unloading && (!e.load.valid() || e.load.wait_for(std::chrono::seconds(0))==std::future_status::ready)) chunks_.erase(it);
+}
+
+void Streamer::update(ecs::Vec3 center) {
+  center_.x=static_cast<std::int32_t>(std::floor(center.x/config_.chunkSize));
+  center_.z=static_cast<std::int32_t>(std::floor(center.z/config_.chunkSize));
+  for(std::int32_t z=-config_.radius;z<=config_.radius;++z) for(std::int32_t x=-config_.radius;x<=config_.radius;++x) request({center_.x+x,center_.z+z});
+  for(auto it=chunks_.begin();it!=chunks_.end();) {
+    if(std::abs(it->first.x-center_.x)>config_.radius || std::abs(it->first.z-center_.z)>config_.radius) { const ChunkCoord c=it->first; ++it; unload(c); }
+    else ++it;
+  }
+}
+
+void Streamer::tick() {
+  std::vector<std::pair<std::int64_t,ChunkCoord>> candidates;
+  for(auto& [coord,e]:chunks_) {
+    if(e.state==ChunkState::Loading && e.load.valid() && e.load.wait_for(std::chrono::seconds(0))==std::future_status::ready) { e.data=std::make_shared<ChunkData>(e.load.get()); e.state=ChunkState::Ready; }
+    if(e.state==ChunkState::Ready) e.state=ChunkState::Activating;
+    if(e.state==ChunkState::Activating) e.state=ChunkState::Active;
+    if(e.state==ChunkState::Active) candidates.emplace_back(distanceSq(coord,center_),coord);
+  }
+  std::sort(candidates.begin(),candidates.end());
+  for(std::size_t i=config_.maxActive;i<candidates.size();++i) unload(candidates[i].second);
+}
+
+ChunkState Streamer::state(ChunkCoord coord) const { const auto it=chunks_.find(coord); return it==chunks_.end()?ChunkState::Unloaded:it->second.state; }
+
+std::vector<ChunkCoord> Streamer::activeChunks() const {
+  std::vector<ChunkCoord> result; result.reserve(chunks_.size());
+  for(const auto& [coord,e]:chunks_) if(e.state==ChunkState::Active) result.push_back(coord);
+  return result;
+}
+
+} // namespace btai::world
