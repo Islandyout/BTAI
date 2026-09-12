@@ -53,6 +53,7 @@ add_executable(btai
   src/render/Camera.cpp
   src/ai/CommandInterpreter.cpp
   src/render/VulkanRendererStateOfArt.cpp
+  src/render/VulkanRendererGltf.cpp
   src/platform/Window.cpp
   src/assets/AssetManager.cpp)
 add_dependencies(btai btai_shaders)
