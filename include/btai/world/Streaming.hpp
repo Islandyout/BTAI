@@ -33,7 +33,15 @@ class Streamer final {
 public:
   struct Config { float chunkSize=128.0f; std::int32_t radius=2; std::size_t maxActive=64; };
 
-  explicit Streamer(JobSystem& jobs, Config config = {});
+  // NOTE: the default argument spells out Config's field values explicitly
+  // (matching Config's own default member initializers below) rather than
+  // using `Config config = {}`. A bare `{}` default argument would need to
+  // evaluate Config's default member initializers, but per [class.mem] those
+  // aren't usable until the *enclosing* class (Streamer) is complete — which
+  // it isn't yet at this point in its own body. GCC correctly rejects
+  // `= {}` here with "default member initializer ... required before the
+  // end of its enclosing class"; spelling out the values sidesteps it.
+  explicit Streamer(JobSystem& jobs, Config config = Config{128.0f, 2, 64});
   ~Streamer();
   Streamer(const Streamer&) = delete;
   Streamer& operator=(const Streamer&) = delete;

@@ -160,6 +160,40 @@ public:
     }
   }
 
+  // Visits every alive entity regardless of which components it has. Useful for
+  // generic introspection/serialization (see project::Scene) where the exact
+  // component set isn't known ahead of time.
+  //
+  // Unlike each<T...>(), the callback runs AFTER the registry's lock is
+  // released (a snapshot of alive entities is taken under the lock first).
+  // This is deliberate: callers commonly want to call back into other
+  // Registry methods (get<T>, has<T>, ...) per entity — e.g. dumping each
+  // entity's components — and since std::mutex isn't recursive, doing that
+  // while still holding the lock deadlocks the calling thread.
+  template<class F>
+  void eachAlive(F&& function) const {
+    std::vector<Entity> snapshot;
+    {
+      std::lock_guard lock(mutex_);
+      snapshot.reserve(alive_.size());
+      for (std::uint32_t index = 0; index < generations_.size(); ++index) {
+        if (alive_[index]) snapshot.push_back(Entity{index, generations_[index]});
+      }
+    }
+    for (const auto entity : snapshot) std::invoke(function, entity);
+  }
+
+  // Destroys every entity and drops all component storage. Leaves the registry
+  // as if freshly constructed (generations reset to 0).
+  void clear() noexcept {
+    std::lock_guard lock(mutex_);
+    pools_ = Pools{};
+    generations_.clear();
+    alive_.clear();
+    free_.clear();
+    aliveCount_ = 0;
+  }
+
 private:
   bool validUnlocked(Entity entity) const noexcept {
     return entity.valid() && entity.index < alive_.size() && alive_[entity.index] && generations_[entity.index] == entity.generation;

@@ -40,7 +40,7 @@ bool VulkanRenderer::uploadModel(const assets::Model& model){
   if(!uploadBuffer(vertices.data(),sizeof(Vertex)*vertices.size(),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,vertex,vertexMemory)||!uploadBuffer(indices.data(),sizeof(std::uint32_t)*indices.size(),VK_BUFFER_USAGE_INDEX_BUFFER_BIT,index,indexMemory)){
     if(vertex)vkDestroyBuffer(device_,vertex,nullptr);if(vertexMemory)vkFreeMemory(device_,vertexMemory,nullptr);if(index)vkDestroyBuffer(device_,index,nullptr);if(indexMemory)vkFreeMemory(device_,indexMemory,nullptr);return false;
   }
-  destroyGeometryBuffers();vertexBuffer_=vertex;vertexMemory_=vertexMemory;indexBuffer_=index;indexMemory_=index;indexCount_=static_cast<std::uint32_t>(indices.size());return true;
+  destroyGeometryBuffers();vertexBuffer_=vertex;vertexMemory_=vertexMemory;indexBuffer_=index;indexMemory_=indexMemory;indexCount_=static_cast<std::uint32_t>(indices.size());return true;
 }
 
 void VulkanRenderer::setModel(std::shared_ptr<const assets::Model> model){

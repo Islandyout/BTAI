@@ -3,10 +3,12 @@
 #include "btai/editor/ProjectBrowser.hpp"
 #include "btai/jobs/JobSystem.hpp"
 #include "btai/project/Project.hpp"
+#include "btai/project/Scene.hpp"
 #include "btai/render/RenderSnapshot.hpp"
 #include <atomic>
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 
 int main() {
   btai::ecs::Registry registry;
@@ -54,18 +56,47 @@ int main() {
   const auto opened=btai::project::Project::open(root/"Project.btai");
   assert(opened.root()==project.root());
   assert(opened.config().startupScene=="Scenes/Main.btai");
-  assert(opened.list().size()==12);
+  // 13, not 12: Project::create's 12 folders plus the Project.btai manifest
+  // file it writes alongside them in the same root directory.
+  assert(opened.list().size()==13);
   assert(opened.resolve("Assets")==project.assets());
   bool escaped=false;
   try { (void)opened.resolve("../outside"); } catch(const std::invalid_argument&) { escaped=true; }
   assert(escaped);
 
+  // Fixture: ProjectBrowser only lists what's actually on disk, so exercising
+  // it needs a real subfolder+file — Project::create only lays out the empty
+  // top-level folders. (The original test asserted this same file existed
+  // without anything ever creating it.)
+  std::filesystem::create_directories(project.assets()/"Models");
+  std::ofstream(project.assets()/"Models"/"sample.gltf") << "{}";
+
   btai::editor::ProjectBrowser browser(opened);
   const auto rootEntries=browser.entries();
-  assert(rootEntries.size()==12);
+  assert(rootEntries.size()==13);
   assert(rootEntries.front().kind==btai::editor::AssetKind::Folder);
   const auto modelEntries=browser.entries("Assets/Models");
   assert(modelEntries.size()==1&&modelEntries.front().path=="Assets/Models/sample.gltf");
+
+  // --- AI query commands + scene save/load round trip ---
+  ai.setProject(&opened);
+  const auto hero=ai.execute(R"({"command":"spawn_entity","transform":[2,0,-3],"name":"Hero"})");
+  assert(hero.ok);
+  const auto listed=ai.execute(nlohmann::json{{"command","list_entities"}});
+  assert(listed.ok&&listed.data.is_array()&&!listed.data.empty());
+  const auto described=ai.execute(nlohmann::json{{"command","describe_entity"},{"entity",{{"index",hero.entity.index},{"generation",hero.entity.generation}}}});
+  assert(described.ok&&described.data.contains("Transform")&&described.data["Name"]["value"]=="Hero");
+
+  const auto saved=ai.execute(nlohmann::json{{"command","save_scene"},{"path","Scenes/Test.btai"}});
+  assert(saved.ok&&std::filesystem::exists(opened.resolve("Scenes/Test.btai")));
+  const auto entityCountBeforeLoad=registry.size();
+  const auto loaded=ai.execute(nlohmann::json{{"command","load_scene"},{"path","Scenes/Test.btai"}});
+  assert(loaded.ok);
+  assert(registry.size()==entityCountBeforeLoad); // clear+reload of the same scene preserves entity count
+  bool foundHeroAfterReload=false;
+  registry.each<btai::ecs::Name>([&](btai::ecs::Entity,const btai::ecs::Name& name){ if(name.value=="Hero") foundHeroAfterReload=true; });
+  assert(foundHeroAfterReload);
+
   std::filesystem::remove_all(root,ec);
   return 0;
 }

@@ -1,4 +1,6 @@
 #include "btai/ai/CommandInterpreter.hpp"
+#include "btai/project/Project.hpp"
+#include "btai/project/Scene.hpp"
 #include <algorithm>
 #include <array>
 #include <exception>
@@ -31,7 +33,27 @@ CommandResult CommandInterpreter::execute(const nlohmann::json& c) {
       } catch(...){registry_.destroy(e);throw;}
       return {true,e,{}};
     }
+    if(op=="list_entities"){
+      nlohmann::json list=nlohmann::json::array();
+      registry_.eachAlive([&](ecs::Entity ent){
+        nlohmann::json item={{"index",ent.index},{"generation",ent.generation}};
+        if(const auto* name=registry_.get<ecs::Name>(ent))item["name"]=name->value;
+        list.push_back(std::move(item));
+      });
+      CommandResult r;r.ok=true;r.data=std::move(list);return r;
+    }
+    if(op=="save_scene"||op=="load_scene"){
+      if(!project_)return fail(op+": no project is bound to this interpreter (call setProject first)");
+      if(!c.contains("path")||!c["path"].is_string())return fail("path must be a string");
+      try{
+        const auto resolved=project_->resolve(c["path"].get<std::string>());
+        if(op=="save_scene")project::saveScene(registry_,resolved);
+        else project::loadScene(registry_,resolved,c.value("clear",true));
+      }catch(const std::exception& e){return fail(op+" failed: "+e.what());}
+      CommandResult r;r.ok=true;return r;
+    }
     ecs::Entity e;if(!c.contains("entity")||!entity(c["entity"],e))return fail("invalid or missing entity");
+    if(op=="describe_entity"){CommandResult r;r.ok=true;r.entity=e;r.data=project::dumpEntity(registry_,e);return r;}
     if(op=="destroy_entity"){const bool ok=registry_.destroy(e);return {ok,e,ok?"":"destroy failed"};}
     if(op=="set_transform"){ecs::Vec3 v;if(!vec3(c.value("position",nlohmann::json{}),v))return fail("position must be [x,y,z]");if(auto*t=registry_.get<ecs::Transform>(e))t->position=v;else registry_.add<ecs::Transform>(e,v);return {true,e,{}};}
     if(op=="set_velocity"){ecs::Vec3 v;if(!vec3(c.value("velocity",nlohmann::json{}),v))return fail("velocity must be [x,y,z]");if(auto*v0=registry_.get<ecs::Velocity>(e))v0->value=v;else registry_.add<ecs::Velocity>(e,v);return {true,e,{}};}
