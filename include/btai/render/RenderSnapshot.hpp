@@ -21,20 +21,16 @@ struct RenderSnapshot {
   std::vector<RenderInstance> instances;
 };
 
-inline void extract(const ecs::Registry& registry, RenderSnapshot& snapshot) {
+inline void extract(ecs::Registry& registry, RenderSnapshot& snapshot) {
   snapshot.instances.clear();
   snapshot.instances.reserve(registry.size());
-  registry.each<ecs::Transform, ecs::Renderable>([&](ecs::Entity entity, const ecs::Transform& transform, const ecs::Renderable& renderable) {
-    if (!renderable.visible) return;
-    RenderInstance instance;
-    instance.entity = entity;
-    instance.position = transform.position;
-    instance.mesh = renderable.mesh;
-    instance.material = renderable.material;
-    if (const auto* rotation = registry.get<ecs::Rotation>(entity)) instance.rotation = rotation->euler;
-    if (const auto* scale = registry.get<ecs::Scale>(entity)) instance.scale = scale->value;
-    snapshot.instances.push_back(instance);
-  });
+  registry.each<ecs::Transform, ecs::Rotation, ecs::Scale, ecs::Renderable>(
+      [&](ecs::Entity entity, const ecs::Transform& transform, const ecs::Rotation& rotation,
+          const ecs::Scale& scale, const ecs::Renderable& renderable) {
+        if (!renderable.visible) return;
+        snapshot.instances.push_back(RenderInstance{entity, transform.position, rotation.euler, scale.value,
+                                                    renderable.mesh, renderable.material});
+      });
 }
 
 } // namespace btai::render
