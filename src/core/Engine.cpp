@@ -2,6 +2,7 @@
 #include "btai/platform/Window.hpp"
 #include "btai/render/VulkanRenderer.hpp"
 #include <chrono>
+#include <thread>
 
 namespace btai {
 
