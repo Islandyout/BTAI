@@ -12,8 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Vulkan and GLFW
-        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev vulkan-tools libglfw3-dev
+        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev vulkan-tools libglfw3-dev libxkbcommon-dev
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBTAI_ENABLE_VALIDATION=OFF
       - name: Build
         run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
