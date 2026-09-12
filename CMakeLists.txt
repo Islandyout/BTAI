@@ -24,26 +24,19 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(json)
 endif()
 
-find_program(BTAI_GLSLC glslc
-  HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
+find_program(BTAI_GLSLC glslc HINTS "$ENV{VULKAN_SDK}/Bin" "$ENV{VULKAN_SDK}/bin")
 if(NOT BTAI_GLSLC)
   message(FATAL_ERROR "glslc was not found. Install the Vulkan SDK or the glslc package.")
 endif()
 
 set(BTAI_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-set(BTAI_SHADER_SOURCES
-  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/basic.vert"
-  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/basic.frag")
-set(BTAI_SHADER_BINARIES
-  "${BTAI_SHADER_OUTPUT_DIR}/basic.vert.spv"
-  "${BTAI_SHADER_OUTPUT_DIR}/basic.frag.spv")
-add_custom_command(
-  OUTPUT ${BTAI_SHADER_BINARIES}
+set(BTAI_SHADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/shaders/basic.vert" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/basic.frag")
+set(BTAI_SHADER_BINARIES "${BTAI_SHADER_OUTPUT_DIR}/basic.vert.spv" "${BTAI_SHADER_OUTPUT_DIR}/basic.frag.spv")
+add_custom_command(OUTPUT ${BTAI_SHADER_BINARIES}
   COMMAND ${CMAKE_COMMAND} -E make_directory "${BTAI_SHADER_OUTPUT_DIR}"
   COMMAND ${BTAI_GLSLC} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/basic.vert" -o "${BTAI_SHADER_OUTPUT_DIR}/basic.vert.spv"
   COMMAND ${BTAI_GLSLC} "${CMAKE_CURRENT_SOURCE_DIR}/shaders/basic.frag" -o "${BTAI_SHADER_OUTPUT_DIR}/basic.frag.spv"
-  DEPENDS ${BTAI_SHADER_SOURCES}
-  VERBATIM)
+  DEPENDS ${BTAI_SHADER_SOURCES} VERBATIM)
 add_custom_target(btai_shaders ALL DEPENDS ${BTAI_SHADER_BINARIES})
 
 add_executable(btai
@@ -56,7 +49,7 @@ add_executable(btai
   src/input/Input.cpp
   src/render/Camera.cpp
   src/ai/CommandInterpreter.cpp
-  src/render/VulkanRenderer.cpp
+  src/render/VulkanRendererStateOfArt.cpp
   src/platform/Window.cpp)
 add_dependencies(btai btai_shaders)
 target_include_directories(btai PRIVATE include)
