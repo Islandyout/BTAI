@@ -2,8 +2,11 @@
 
 #include <atomic>
 #include <cstdint>
+#include <jthread>
 #include <memory>
 #include "btai/core/Log.hpp"
+#include "btai/ecs/Registry.hpp"
+#include "btai/jobs/JobSystem.hpp"
 
 namespace btai {
 
@@ -29,9 +32,14 @@ public:
   void shutdown() noexcept;
 
 private:
+  void simulationLoop(std::stop_token token);
+
   EngineConfig config_;
+  JobSystem jobs_;
+  ecs::Registry registry_;
   std::unique_ptr<Window> window_;
   std::unique_ptr<VulkanRenderer> renderer_;
+  std::jthread simulation_;
   std::atomic_bool running_{false};
 };
 
