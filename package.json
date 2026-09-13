@@ -1,0 +1,23 @@
+{
+  "name": "engine-skeleton",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal, modular game engine skeleton. Core loop is dependency-free; renderer/physics/etc. are pluggable EngineModules.",
+  "scripts": {
+    "dev": "vite --config vite.config.ts examples/basic-scene",
+    "build": "tsc --noEmit && vite build --config vite.config.ts examples/basic-scene",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "optionalDependencies": {
+    "@dimforge/rapier3d-compat": "^0.14.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "@types/three": "^0.169.0"
+  }
+}

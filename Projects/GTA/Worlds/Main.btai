@@ -1,8 +1,0 @@
-{
-  "format": 1,
-  "type": "world",
-  "name": "Main",
-  "chunkSize": 256,
-  "streamRadius": 4,
-  "chunks": []
-}
