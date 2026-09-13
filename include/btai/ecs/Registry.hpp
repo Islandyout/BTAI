@@ -6,6 +6,7 @@
 #include <functional>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -28,184 +29,44 @@ class Registry final {
     bool has(std::uint32_t index) const noexcept { return index < sparse_.size() && sparse_[index] != npos; }
     T& add(std::uint32_t index, T value = {}) {
       ensure(index);
-      if (has(index)) {
-        data_[sparse_[index]] = std::move(value);
-        return data_[sparse_[index]];
-      }
-      sparse_[index] = static_cast<std::uint32_t>(entities_.size());
-      entities_.push_back(index);
-      data_.push_back(std::move(value));
-      return data_.back();
+      if (has(index)) { data_[sparse_[index]] = std::move(value); return data_[sparse_[index]]; }
+      sparse_[index] = static_cast<std::uint32_t>(entities_.size()); entities_.push_back(index); data_.push_back(std::move(value)); return data_.back();
     }
     void remove(std::uint32_t index) noexcept {
       if (!has(index)) return;
-      const auto dense = sparse_[index];
-      const auto last = static_cast<std::uint32_t>(entities_.size() - 1);
-      if (dense != last) {
-        entities_[dense] = entities_[last];
-        data_[dense] = std::move(data_[last]);
-        sparse_[entities_[dense]] = dense;
-      }
-      entities_.pop_back();
-      data_.pop_back();
-      sparse_[index] = npos;
+      const auto dense = sparse_[index]; const auto last = static_cast<std::uint32_t>(entities_.size() - 1);
+      if (dense != last) { entities_[dense] = entities_[last]; data_[dense] = std::move(data_[last]); sparse_[entities_[dense]] = dense; }
+      entities_.pop_back(); data_.pop_back(); sparse_[index] = npos;
     }
     T* get(std::uint32_t index) noexcept { return has(index) ? &data_[sparse_[index]] : nullptr; }
     const T* get(std::uint32_t index) const noexcept { return has(index) ? &data_[sparse_[index]] : nullptr; }
     const std::vector<std::uint32_t>& entities() const noexcept { return entities_; }
-    std::size_t size() const noexcept { return entities_.size(); }
   private:
-    void ensure(std::uint32_t index) {
-      if (index >= sparse_.size()) sparse_.resize(static_cast<std::size_t>(index) + 1, npos);
-    }
-    std::vector<std::uint32_t> sparse_;
-    std::vector<std::uint32_t> entities_;
-    std::vector<T> data_;
+    void ensure(std::uint32_t index) { if (index >= sparse_.size()) sparse_.resize(static_cast<std::size_t>(index) + 1, npos); }
+    std::vector<std::uint32_t> sparse_; std::vector<std::uint32_t> entities_; std::vector<T> data_;
   };
-
-  using Pools = std::tuple<Pool<Transform>, Pool<Rotation>, Pool<Scale>, Pool<Velocity>, Pool<Acceleration>,
-                        Pool<RigidBody>, Pool<Collider>, Pool<Health>, Pool<AIState>, Pool<Pedestrian>,
-                        Pool<Vehicle>, Pool<AnimationState>, Pool<Renderable>, Pool<Name>>;
-
+  using Pools = std::tuple<Pool<Transform>, Pool<Rotation>, Pool<Scale>, Pool<Velocity>, Pool<Acceleration>, Pool<RigidBody>, Pool<Collider>, Pool<Health>, Pool<AIState>, Pool<Pedestrian>, Pool<Vehicle>, Pool<AnimationState>, Pool<Renderable>, Pool<Name>>;
   template<class T> Pool<T>& pool() { return std::get<Pool<T>>(pools_); }
   template<class T> const Pool<T>& pool() const { return std::get<Pool<T>>(pools_); }
   template<class... T> void removeAll(std::uint32_t index) noexcept { (pool<T>().remove(index), ...); }
-
 public:
-  explicit Registry(std::uint32_t reserveEntities = 10000) {
-    generations_.reserve(reserveEntities);
-    alive_.reserve(reserveEntities);
-    free_.reserve(reserveEntities);
-  }
-
-  Entity create() {
-    std::lock_guard lock(mutex_);
-    std::uint32_t index;
-    if (free_.empty()) {
-      index = static_cast<std::uint32_t>(generations_.size());
-      generations_.push_back(0);
-      alive_.push_back(true);
-    } else {
-      index = free_.back();
-      free_.pop_back();
-      alive_[index] = true;
-    }
-    ++aliveCount_;
-    return {index, generations_[index]};
-  }
-
-  bool destroy(Entity entity) noexcept {
-    std::lock_guard lock(mutex_);
-    if (!validUnlocked(entity)) return false;
-    removeAll<Transform, Rotation, Scale, Velocity, Acceleration, RigidBody, Collider, Health, AIState,
-              Pedestrian, Vehicle, AnimationState, Renderable, Name>(entity.index);
-    alive_[entity.index] = false;
-    ++generations_[entity.index];
-    free_.push_back(entity.index);
-    --aliveCount_;
-    return true;
-  }
-
-  bool alive(Entity entity) const noexcept {
-    std::lock_guard lock(mutex_);
-    return validUnlocked(entity);
-  }
-
-  std::size_t size() const noexcept {
-    std::lock_guard lock(mutex_);
-    return aliveCount_;
-  }
-
-  template<class T, class... Args>
-  T& add(Entity entity, Args&&... args) {
-    std::lock_guard lock(mutex_);
-    if (!validUnlocked(entity)) throw std::invalid_argument("invalid entity");
-    return pool<T>().add(entity.index, T{std::forward<Args>(args)...});
-  }
-
-  template<class T>
-  bool remove(Entity entity) noexcept {
-    std::lock_guard lock(mutex_);
-    if (!validUnlocked(entity)) return false;
-    pool<T>().remove(entity.index);
-    return true;
-  }
-
-  template<class T>
-  bool has(Entity entity) const noexcept {
-    std::lock_guard lock(mutex_);
-    return validUnlocked(entity) && pool<T>().has(entity.index);
-  }
-
-  template<class T>
-  T* get(Entity entity) noexcept {
-    std::lock_guard lock(mutex_);
-    return validUnlocked(entity) ? pool<T>().get(entity.index) : nullptr;
-  }
-
-  template<class T>
-  const T* get(Entity entity) const noexcept {
-    std::lock_guard lock(mutex_);
-    return validUnlocked(entity) ? pool<T>().get(entity.index) : nullptr;
-  }
-
-  template<class... T, class F>
-  void each(F&& function) {
-    std::lock_guard lock(mutex_);
-    if constexpr (sizeof...(T) == 0) return;
-    const auto& entities = pool<std::tuple_element_t<0, std::tuple<T...>>>().entities();
-    for (const auto index : entities) {
-      if (!alive_[index] || !hasAllUnlocked<T...>(index)) continue;
-      std::invoke(function, Entity{index, generations_[index]}, *pool<T>().get(index)...);
-    }
-  }
-
-  // Visits every alive entity regardless of which components it has. Useful for
-  // generic introspection/serialization (see project::Scene) where the exact
-  // component set isn't known ahead of time.
-  //
-  // Unlike each<T...>(), the callback runs AFTER the registry's lock is
-  // released (a snapshot of alive entities is taken under the lock first).
-  // This is deliberate: callers commonly want to call back into other
-  // Registry methods (get<T>, has<T>, ...) per entity — e.g. dumping each
-  // entity's components — and since std::mutex isn't recursive, doing that
-  // while still holding the lock deadlocks the calling thread.
-  template<class F>
-  void eachAlive(F&& function) const {
-    std::vector<Entity> snapshot;
-    {
-      std::lock_guard lock(mutex_);
-      snapshot.reserve(alive_.size());
-      for (std::uint32_t index = 0; index < generations_.size(); ++index) {
-        if (alive_[index]) snapshot.push_back(Entity{index, generations_[index]});
-      }
-    }
-    for (const auto entity : snapshot) std::invoke(function, entity);
-  }
-
-  // Destroys every entity and drops all component storage. Leaves the registry
-  // as if freshly constructed (generations reset to 0).
-  void clear() noexcept {
-    std::lock_guard lock(mutex_);
-    pools_ = Pools{};
-    generations_.clear();
-    alive_.clear();
-    free_.clear();
-    aliveCount_ = 0;
-  }
-
+  explicit Registry(std::uint32_t reserveEntities = 10000) { generations_.reserve(reserveEntities); alive_.reserve(reserveEntities); free_.reserve(reserveEntities); }
+  Entity create() { std::lock_guard lock(mutex_); std::uint32_t index; if (free_.empty()) { index=static_cast<std::uint32_t>(generations_.size()); generations_.push_back(0); alive_.push_back(true); } else { index=free_.back(); free_.pop_back(); alive_[index]=true; } ++aliveCount_; return {index,generations_[index]}; }
+  bool destroy(Entity entity) noexcept { std::lock_guard lock(mutex_); if (!validUnlocked(entity)) return false; removeAll<Transform,Rotation,Scale,Velocity,Acceleration,RigidBody,Collider,Health,AIState,Pedestrian,Vehicle,AnimationState,Renderable,Name>(entity.index); alive_[entity.index]=false; ++generations_[entity.index]; free_.push_back(entity.index); --aliveCount_; return true; }
+  bool alive(Entity entity) const noexcept { std::lock_guard lock(mutex_); return validUnlocked(entity); }
+  std::size_t size() const noexcept { std::lock_guard lock(mutex_); return aliveCount_; }
+  template<class T, class... Args> T& add(Entity entity, Args&&... args) { std::lock_guard lock(mutex_); if (!validUnlocked(entity)) throw std::invalid_argument("invalid entity"); return pool<T>().add(entity.index,T{std::forward<Args>(args)...}); }
+  template<class T> bool remove(Entity entity) noexcept { std::lock_guard lock(mutex_); if (!validUnlocked(entity)) return false; pool<T>().remove(entity.index); return true; }
+  template<class T> bool has(Entity entity) const noexcept { std::lock_guard lock(mutex_); return validUnlocked(entity)&&pool<T>().has(entity.index); }
+  template<class T> T* get(Entity entity) noexcept { std::lock_guard lock(mutex_); return validUnlocked(entity)?pool<T>().get(entity.index):nullptr; }
+  template<class T> const T* get(Entity entity) const noexcept { std::lock_guard lock(mutex_); return validUnlocked(entity)?pool<T>().get(entity.index):nullptr; }
+  template<class T> std::optional<T> copy(Entity entity) const { std::lock_guard lock(mutex_); if(!validUnlocked(entity))return std::nullopt; if(const auto* value=pool<T>().get(entity.index))return *value; return std::nullopt; }
+  template<class... T, class F> void each(F&& function) { std::lock_guard lock(mutex_); if constexpr(sizeof...(T)==0)return; const auto& entities=pool<std::tuple_element_t<0,std::tuple<T...>>>().entities(); for(const auto index:entities){if(!alive_[index]||!hasAllUnlocked<T...>(index))continue;std::invoke(function,Entity{index,generations_[index]},*pool<T>().get(index)...);} }
+  template<class F> void eachAlive(F&& function) const { std::vector<Entity> snapshot; { std::lock_guard lock(mutex_); snapshot.reserve(alive_.size()); for(std::uint32_t index=0;index<generations_.size();++index)if(alive_[index])snapshot.push_back(Entity{index,generations_[index]}); } for(const auto entity:snapshot)std::invoke(function,entity); }
+  void clear() noexcept { std::lock_guard lock(mutex_); pools_=Pools{}; generations_.clear(); alive_.clear(); free_.clear(); aliveCount_=0; }
 private:
-  bool validUnlocked(Entity entity) const noexcept {
-    return entity.valid() && entity.index < alive_.size() && alive_[entity.index] && generations_[entity.index] == entity.generation;
-  }
-  template<class... T> bool hasAllUnlocked(std::uint32_t index) const noexcept { return (pool<T>().has(index) && ...); }
-
-  mutable std::mutex mutex_;
-  std::vector<std::uint32_t> generations_;
-  std::vector<bool> alive_;
-  std::vector<std::uint32_t> free_;
-  std::size_t aliveCount_ = 0;
-  Pools pools_;
+  bool validUnlocked(Entity entity) const noexcept { return entity.valid()&&entity.index<alive_.size()&&alive_[entity.index]&&generations_[entity.index]==entity.generation; }
+  template<class... T> bool hasAllUnlocked(std::uint32_t index) const noexcept { return (pool<T>().has(index)&&...); }
+  mutable std::mutex mutex_; std::vector<std::uint32_t> generations_; std::vector<bool> alive_; std::vector<std::uint32_t> free_; std::size_t aliveCount_=0; Pools pools_;
 };
-
 } // namespace btai::ecs

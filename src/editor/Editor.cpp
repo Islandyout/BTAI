@@ -1,0 +1,131 @@
+#include "btai/editor/Editor.hpp"
+#include "btai/core/Log.hpp"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+#include <GLFW/glfw3.h>
+#include <algorithm>
+#include <cstring>
+#include <exception>
+#include <limits>
+#include <string>
+
+namespace btai::editor {
+namespace {
+constexpr std::uint32_t Invalid=std::numeric_limits<std::uint32_t>::max();
+const char* stateName(ecs::AIState::State s) noexcept {
+  switch(s){case ecs::AIState::State::Idle:return "Idle";case ecs::AIState::State::Walking:return "Walking";case ecs::AIState::State::Running:return "Running";case ecs::AIState::State::Driving:return "Driving";case ecs::AIState::State::Fleeing:return "Fleeing";case ecs::AIState::State::Chasing:return "Chasing";case ecs::AIState::State::Dead:return "Dead";}
+  return "Unknown";
+}
+void checkVk(VkResult result){if(result!=VK_SUCCESS)Log::write(LogLevel::Error,"ImGui Vulkan backend error: "+std::to_string(static_cast<int>(result)));}
+}
+Editor::Editor(GLFWwindow& window, project::Project& project, ecs::Registry& registry, std::atomic_bool& paused):window_(window),project_(project),registry_(registry),paused_(paused),browser_(project){}
+Editor::~Editor(){shutdown();}
+bool Editor::initialize(const VulkanRenderer::ImGuiBackendContext& context){
+  if(initialized_)return true;
+  context_=context;
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  auto& io=ImGui::GetIO();
+  io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard|ImGuiConfigFlags_DockingEnable;
+  io.ConfigWindowsMoveFromTitleBarOnly=true;
+  ImGui::StyleColorsDark();
+  auto& style=ImGui::GetStyle();
+  style.WindowRounding=2.0f;style.ChildRounding=2.0f;style.FrameRounding=2.0f;style.GrabRounding=2.0f;style.TabRounding=2.0f;
+  if(!ImGui_ImplGlfw_InitForVulkan(&window_,true)){ImGui::DestroyContext();return false;}
+  ImGui_ImplVulkan_InitInfo info{};
+  info.ApiVersion=context.apiVersion;info.Instance=context.instance;info.PhysicalDevice=context.physicalDevice;info.Device=context.device;info.QueueFamily=context.queueFamily;info.Queue=context.queue;info.DescriptorPool=VK_NULL_HANDLE;info.DescriptorPoolSize=1000;info.MinImageCount=std::max(context.imageCount,2u);info.ImageCount=std::max(context.imageCount,2u);info.PipelineInfoMain.RenderPass=context.renderPass;info.PipelineInfoMain.Subpass=0;info.PipelineInfoMain.MSAASamples=VK_SAMPLE_COUNT_1_BIT;info.UseDynamicRendering=false;info.CheckVkResultFn=checkVk;
+  if(!ImGui_ImplVulkan_Init(&info)){ImGui_ImplGlfw_Shutdown();ImGui::DestroyContext();return false;}
+  initialized_=true;return true;
+}
+void Editor::shutdown() noexcept{if(!initialized_)return;ImGui_ImplVulkan_Shutdown();ImGui_ImplGlfw_Shutdown();ImGui::DestroyContext();initialized_=false;}
+void Editor::newFrame(){if(!initialized_)return;ImGui_ImplVulkan_NewFrame();ImGui_ImplGlfw_NewFrame();ImGui::NewFrame();}
+void Editor::draw(){
+  if(!initialized_)return;
+  const ImGuiViewport* viewport=ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(viewport->WorkPos);ImGui::SetNextWindowSize(viewport->WorkSize);ImGui::SetNextWindowViewport(viewport->ID);
+  constexpr ImGuiWindowFlags hostFlags=ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoNavFocus|ImGuiWindowFlags_MenuBar;
+  ImGui::Begin("BTAI Editor",nullptr,hostFlags);
+  const ImGuiID dock=ImGui::GetID("BTAIEditorDockSpace");ImGui::DockSpace(dock,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
+  drawMenuBar();drawToolbar();ImGui::End();
+  drawHierarchy();drawInspector();drawProject();if(showConsole_)drawConsole();if(showStats_)drawSceneStats();
+}
+void Editor::drawMenuBar(){
+  if(!ImGui::BeginMenuBar())return;
+  if(ImGui::BeginMenu("File")){
+    if(ImGui::MenuItem("Save Scene","Ctrl+S")){try{project::saveScene(registry_,project_.resolve(project_.config().startupScene));}catch(const std::exception&e){Log::write(LogLevel::Error,e.what());}}
+    if(ImGui::MenuItem("Reload Scene")){try{project::loadScene(registry_,project_.resolve(project_.config().startupScene));selectedIndex_=Invalid;}catch(const std::exception&e){Log::write(LogLevel::Error,e.what());}}
+    ImGui::Separator();if(ImGui::MenuItem("Exit"))glfwSetWindowShouldClose(&window_,GLFW_TRUE);ImGui::EndMenu();
+  }
+  if(ImGui::BeginMenu("Window")){ImGui::MenuItem("Console",nullptr,&showConsole_);ImGui::MenuItem("Stats",nullptr,&showStats_);ImGui::EndMenu();}
+  if(ImGui::BeginMenu("Help")){ImGui::TextUnformatted("BTAI Editor");ImGui::Text("Project: %s",project_.config().name.c_str());ImGui::EndMenu();}
+  ImGui::EndMenuBar();
+}
+void Editor::drawToolbar(){
+  ImGui::BeginChild("Toolbar",ImVec2(0,34),false,ImGuiWindowFlags_NoScrollbar);
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(8,5));
+  const bool paused=paused_.load(std::memory_order_acquire);
+  if(ImGui::Button(paused?"Play":"Pause"))paused_.store(!paused,std::memory_order_release);
+  ImGui::SameLine();ImGui::TextDisabled("Scene: %s",project_.config().startupScene.generic_string().c_str());
+  ImGui::SameLine();ImGui::TextDisabled("Entities: %zu",registry_.size());
+  ImGui::PopStyleVar();ImGui::EndChild();
+}
+void Editor::drawHierarchy(){
+  ImGui::Begin("Hierarchy");
+  ImGui::TextUnformatted(project_.config().name.c_str());ImGui::Separator();
+  registry_.eachAlive([this](ecs::Entity e){
+    std::string name="Entity "+std::to_string(e.index);
+    if(const auto n=registry_.copy<ecs::Name>(e))name=n->value;
+    const bool selected=e.index==selectedIndex_&&e.generation==selectedGeneration_;
+    if(ImGui::Selectable(name.c_str(),selected)){selectedIndex_=e.index;selectedGeneration_=e.generation;}
+  });
+  ImGui::End();
+}
+bool Editor::editVec3(const char* label,ecs::Vec3& v,float speed){float a[3]{v.x,v.y,v.z};if(!ImGui::DragFloat3(label,a,speed))return false;v={a[0],a[1],a[2]};return true;}
+void Editor::drawInspector(){
+  ImGui::Begin("Inspector");
+  const ecs::Entity e{selectedIndex_,selectedGeneration_};
+  if(selectedIndex_==Invalid||!registry_.alive(e)){ImGui::TextDisabled("Select an entity");ImGui::End();return;}
+  ImGui::Text("Entity %u",e.index);ImGui::SameLine();ImGui::TextDisabled("generation %u",e.generation);ImGui::Separator();
+  const bool editable=paused_.load(std::memory_order_acquire);
+  if(!editable)ImGui::TextDisabled("Pause simulation to edit components");
+  if(editable){
+    if(auto* n=registry_.get<ecs::Name>(e)){char buffer[256]{};std::strncpy(buffer,n->value.c_str(),sizeof(buffer)-1);if(ImGui::InputText("Name",buffer,sizeof(buffer)))n->value=buffer;}
+    if(auto* t=registry_.get<ecs::Transform>(e)){ImGui::SeparatorText("Transform");editVec3("Position",t->position);}
+    if(auto* r=registry_.get<ecs::Rotation>(e))editVec3("Rotation",r->euler,0.5f);
+    if(auto* s=registry_.get<ecs::Scale>(e))editVec3("Scale",s->value,0.01f);
+    if(auto* v=registry_.get<ecs::Velocity>(e))editVec3("Velocity",v->value);
+    if(auto* h=registry_.get<ecs::Health>(e)){ImGui::SeparatorText("Health");ImGui::DragFloat("Current",&h->current,0.1f,0.0f,h->maximum);ImGui::DragFloat("Maximum",&h->maximum,0.1f,0.0f,100000.0f);h->current=std::min(h->current,h->maximum);}
+    if(auto* ai=registry_.get<ecs::AIState>(e)){ImGui::SeparatorText("AI");const char* states[]={"Idle","Walking","Running","Driving","Fleeing","Chasing","Dead"};int current=static_cast<int>(ai->state);if(ImGui::Combo("State",&current,states,7))ai->state=static_cast<ecs::AIState::State>(current);}
+    if(auto* rb=registry_.get<ecs::RigidBody>(e)){ImGui::SeparatorText("Physics");ImGui::DragFloat("Mass",&rb->mass,0.01f,0.001f,100000.0f);ImGui::Checkbox("Dynamic",&rb->dynamic);rb->inverseMass=rb->dynamic&&rb->mass>0.0f?1.0f/rb->mass:0.0f;}
+    if(auto* ren=registry_.get<ecs::Renderable>(e)){ImGui::SeparatorText("Rendering");ImGui::Checkbox("Visible",&ren->visible);ImGui::DragScalar("Mesh",ImGuiDataType_U32,&ren->mesh,1.0f,nullptr,nullptr,"%u");ImGui::DragScalar("Material",ImGuiDataType_U32,&ren->material,1.0f,nullptr,nullptr,"%u");}
+  } else {
+    if(const auto n=registry_.copy<ecs::Name>(e))ImGui::Text("Name: %s",n->value.c_str());
+    if(const auto t=registry_.copy<ecs::Transform>(e)){ImGui::SeparatorText("Transform");ImGui::Text("Position  %.2f  %.2f  %.2f",t->position.x,t->position.y,t->position.z);}
+    if(const auto r=registry_.copy<ecs::Rotation>(e))ImGui::Text("Rotation  %.2f  %.2f  %.2f",r->euler.x,r->euler.y,r->euler.z);
+    if(const auto s=registry_.copy<ecs::Scale>(e))ImGui::Text("Scale  %.2f  %.2f  %.2f",s->value.x,s->value.y,s->value.z);
+    if(const auto v=registry_.copy<ecs::Velocity>(e))ImGui::Text("Velocity  %.2f  %.2f  %.2f",v->value.x,v->value.y,v->value.z);
+    if(const auto h=registry_.copy<ecs::Health>(e)){ImGui::SeparatorText("Health");ImGui::Text("%.1f / %.1f",h->current,h->maximum);}
+    if(const auto ai=registry_.copy<ecs::AIState>(e)){ImGui::SeparatorText("AI");ImGui::Text("State: %s",stateName(ai->state));}
+    if(const auto rb=registry_.copy<ecs::RigidBody>(e)){ImGui::SeparatorText("Physics");ImGui::Text("Mass %.2f  %s",rb->mass,rb->dynamic?"Dynamic":"Static");}
+    if(const auto ren=registry_.copy<ecs::Renderable>(e)){ImGui::SeparatorText("Rendering");ImGui::Text("Mesh %u  Material %u  %s",ren->mesh,ren->material,ren->visible?"Visible":"Hidden");}
+  }
+  ImGui::End();
+}
+void Editor::drawProject(){
+  ImGui::Begin("Project");ImGui::TextUnformatted("Assets");ImGui::Separator();
+  try{
+    for(const auto& entry:browser_.entries()){
+      const std::string label=(entry.kind==AssetKind::Folder?"[DIR] ":"      ")+entry.path.filename().string();
+      if(ImGui::Selectable(label.c_str()))projectPath_=entry.path;
+    }
+  }catch(const std::exception&e){ImGui::TextWrapped("%s",e.what());}
+  ImGui::Separator();ImGui::TextWrapped("Root: %s",project_.root().generic_string().c_str());
+  ImGui::End();
+}
+void Editor::drawConsole(){ImGui::Begin("Console");ImGui::TextDisabled("Runtime diagnostics are written to the engine log.");ImGui::Text("Simulation: %s",paused_.load(std::memory_order_acquire)?"Paused":"Running");ImGui::End();}
+void Editor::drawSceneStats(){ImGui::Begin("Scene");ImGui::Text("Entities: %zu",registry_.size());ImGui::Text("Project: %s",project_.config().name.c_str());ImGui::Text("Startup: %s",project_.config().startupScene.generic_string().c_str());ImGui::End();}
+void Editor::render(VkCommandBuffer commandBuffer){if(initialized_)ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),commandBuffer);}
+bool Editor::wantsMouseCapture() const noexcept{return initialized_&&ImGui::GetIO().WantCaptureMouse;}
+bool Editor::wantsKeyboardCapture() const noexcept{return initialized_&&ImGui::GetIO().WantCaptureKeyboard;}
+}
