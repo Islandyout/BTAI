@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import path from 'node:path';
 
 export default defineConfig({
+  base: '/BTAI/',
   resolve: {
     alias: {
       '@core': path.resolve(__dirname, 'src/core'),
