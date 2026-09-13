@@ -9,14 +9,12 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 struct GLFWwindow;
 struct ImDrawData;
-
 namespace btai::editor {
 class Editor final {
 public:
-  Editor(GLFWwindow& window, project::Project& project, ecs::Registry& registry, std::atomic_bool& paused);
+  Editor(GLFWwindow& window, project::Project& project, ecs::Registry& registry, std::atomic_bool& paused, std::atomic_bool& pauseAcknowledged);
   ~Editor();
   Editor(const Editor&) = delete;
   Editor& operator=(const Editor&) = delete;
@@ -28,25 +26,9 @@ public:
   bool wantsMouseCapture() const noexcept;
   bool wantsKeyboardCapture() const noexcept;
 private:
-  void drawMenuBar();
-  void drawToolbar();
-  void drawHierarchy();
-  void drawInspector();
-  void drawProject();
-  void drawConsole();
-  void drawSceneStats();
+  void drawMenuBar(); void drawToolbar(); void drawHierarchy(); void drawInspector(); void drawProject(); void drawConsole(); void drawSceneStats();
   bool editVec3(const char* label, ecs::Vec3& value, float speed=0.05f);
-  GLFWwindow& window_;
-  project::Project& project_;
-  ecs::Registry& registry_;
-  std::atomic_bool& paused_;
-  ProjectBrowser browser_;
-  VulkanRenderer::ImGuiBackendContext context_{};
-  std::filesystem::path projectPath_;
-  std::uint32_t selectedIndex_=std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t selectedGeneration_=0;
-  bool initialized_=false;
-  bool showConsole_=true;
-  bool showStats_=true;
+  GLFWwindow& window_; project::Project& project_; ecs::Registry& registry_; std::atomic_bool& paused_; std::atomic_bool& pauseAcknowledged_; ProjectBrowser browser_; VulkanRenderer::ImGuiBackendContext context_{};
+  std::filesystem::path projectPath_; std::uint32_t selectedIndex_=std::numeric_limits<std::uint32_t>::max(); std::uint32_t selectedGeneration_=0; bool initialized_=false; bool showConsole_=true; bool showStats_=true;
 };
 }
